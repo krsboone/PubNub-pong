@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PubNub Pong</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d1a;
+      color: #eee;
+      font-family: 'Courier New', Courier, monospace;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 32px;
+      padding-bottom: 40px;
+    }
+
+    /* ── Lobby ──────────────────────────────── */
+    #lobby-screen { width: 100%; max-width: 620px; padding: 24px; }
+
+    h1 {
+      text-align: center;
+      font-size: 3.6em;
+      letter-spacing: 10px;
+      color: #e94560;
+      text-shadow: 0 0 24px #e94560, 0 0 6px #e94560;
+      margin-bottom: 32px;
+    }
+
+    .card {
+      background: #0f3460;
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+
+    .card h3 {
+      font-size: 0.78em;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #7799cc;
+      margin-bottom: 14px;
+    }
+
+    .row { display: flex; gap: 10px; align-items: stretch; }
+    .row input { flex: 1; }
+
+    input[type="text"] {
+      background: #1a1a2e;
+      border: 2px solid #334;
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 1em;
+      font-family: inherit;
+      width: 100%;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #00ff87;
+      box-shadow: 0 0 8px #00ff8755;
+    }
+    input:disabled { opacity: .5; cursor: not-allowed; }
+
+    button {
+      background: #e94560;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 1em;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .15s, transform .1s;
+    }
+    button:hover  { background: #ff6b8a; transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+    button:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+    .btn-green  { background: #00bb60; }
+    .btn-green:hover { background: #00d970; }
+    .btn-full   { width: 100%; padding: 14px; font-size: 1.1em; }
+    .btn-cancel { background: #333355; }
+    .btn-cancel:hover { background: #44446a; }
+
+    #username-error { color: #e94560; font-size: .85em; margin-top: 8px; min-height: 1.2em; }
+
+    /* games list */
+    #games-list { list-style: none; }
+    .game-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: #1a1a2e;
+      border: 1px solid #223;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .game-item .creator { font-size: 1em; }
+    .game-item button   { padding: 6px 16px; font-size: .9em; }
+    #no-games { color: #556; text-align: center; padding: 16px 0; font-size: .9em; }
+
+    /* waiting */
+    #waiting-section { text-align: center; }
+    #waiting-section p { color: #aaa; font-size: 1.1em; margin-bottom: 18px; }
+
+    .dot {
+      display: inline-block; width: 10px; height: 10px;
+      background: #00ff87; border-radius: 50%;
+      margin-right: 8px; vertical-align: middle;
+      animation: blink 1.1s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%,100% { opacity: 1; } 50% { opacity: .2; }
+    }
+
+    [hidden] { display: none !important; }
+
+    /* ── Game Screen ────────────────────────── */
+    #game-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #scoreboard {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 800px;
+      padding: 8px 16px;
+      background: #0f3460;
+      border-radius: 10px 10px 0 0;
+      gap: 12px;
+    }
+    #score-display {
+      font-size: 2em;
+      font-weight: bold;
+      letter-spacing: 14px;
+      color: #fff;
+      flex: 1;
+      text-align: center;
+    }
+    .pname      { font-size: .9em; color: #aaa; min-width: 80px; }
+    .pname.p1   { color: #00ff87; }
+    .pname.p2   { color: #ff6b6b; text-align: right; }
+
+    /* Pause button */
+    #pause-btn {
+      background: #222244;
+      color: #99aacc;
+      font-size: .78em;
+      padding: 6px 12px;
+      border: 1px solid #334;
+      border-radius: 5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    #pause-btn:hover   { background: #33335a; color: #ccd; transform: none; }
+    #pause-btn.armed   { background: #7a5c00; color: #ffd93d; border-color: #ffd93d55; }
+    #pause-btn.armed:hover { background: #9a7a00; }
+    #pause-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+    /* End game button */
+    #end-game-btn {
+      background: #2a0d14;
+      color: #cc5566;
+      font-size: .78em;
+      padding: 6px 12px;
+      border: 1px solid #6a2233;
+      border-radius: 5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    #end-game-btn:hover { background: #4a1522; color: #ee8899; transform: none; }
+
+    .game-wrap  { position: relative; line-height: 0; }
+
+    canvas {
+      display: block;
+      background: #0d0d1a;
+      cursor: none;
+    }
+
+    /* Overlay message */
+    #game-msg {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      gap: 20px;
+      opacity: 0;
+      transition: opacity .3s;
+    }
+    #game-msg.show { opacity: 1; }
+    #game-msg-text {
+      font-size: 2em;
+      font-weight: bold;
+      color: #ffd93d;
+      text-shadow: 0 0 20px #ffd93d;
+      text-align: center;
+    }
+
+    /* Resume button — inside the overlay, so pointer-events need restoring */
+    #resume-btn {
+      pointer-events: all;
+      background: #00bb60;
+      color: #fff;
+      font-size: 1.1em;
+      padding: 12px 36px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 0 18px #00bb6066;
+      transition: background .15s, transform .1s;
+    }
+    #resume-btn:hover { background: #00d970; transform: translateY(-1px); }
+
+    /* ── Chat panel ─────────────────────────── */
+    #chat-panel {
+      width: 800px;
+      background: #080814;
+      border-radius: 0 0 10px 10px;
+      border-top: 1px solid #1a1a3a;
+    }
+
+    #chat-header {
+      padding: 6px 16px;
+      font-size: .72em;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #445;
+      border-bottom: 1px solid #111128;
+      user-select: none;
+    }
+
+    #chat-messages {
+      height: 150px;
+      overflow-y: auto;
+      padding: 10px 16px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      scroll-behavior: smooth;
+    }
+    #chat-messages::-webkit-scrollbar { width: 4px; }
+    #chat-messages::-webkit-scrollbar-track { background: transparent; }
+    #chat-messages::-webkit-scrollbar-thumb { background: #22224a; border-radius: 2px; }
+
+    .chat-msg { font-size: .86em; line-height: 1.45; }
+    .chat-msg .chat-meta { margin-bottom: 1px; }
+    .chat-msg .chat-who  { font-weight: bold; color: #ff6b6b; }
+    .chat-msg.mine .chat-who { color: #00ff87; }
+    .chat-msg .chat-time { color: #333360; font-size: .8em; margin-left: 6px; }
+    .chat-msg .chat-text { color: #bbbbd0; word-break: break-word; padding-left: 2px; }
+
+    .chat-empty { color: #333360; font-size: .85em; text-align: center; padding: 20px 0; }
+
+    #chat-input-row {
+      display: flex;
+      gap: 8px;
+      padding: 8px 12px 12px;
+      border-top: 1px solid #111128;
+    }
+    #chat-input-row input { flex: 1; font-size: .95em; padding: 8px 12px; }
+    #chat-send-btn { padding: 8px 18px; font-size: .9em; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════ LOBBY SCREEN ═══════════ -->
+<div id="lobby-screen">
+  <h1>PONG</h1>
+
+  <div id="username-card" class="card">
+    <h3>Your Username</h3>
+    <div class="row">
+      <input id="username-input" type="text" placeholder="alphanumeric, max 20" maxlength="20" />
+      <button id="enter-btn">Enter</button>
+    </div>
+    <div id="username-error"></div>
+  </div>
+
+  <div id="game-options" hidden>
+    <div class="card">
+      <button id="create-btn" class="btn-green btn-full">+ Create New Game</button>
+    </div>
+    <div class="card">
+      <h3>Join an Existing Game</h3>
+      <ul id="games-list"></ul>
+      <div id="no-games">No open games — create one above!</div>
+    </div>
+  </div>
+
+  <div id="waiting-section" class="card" hidden>
+    <p><span class="dot"></span><span id="waiting-text">Waiting for an opponent to join…</span></p>
+    <button id="cancel-btn" class="btn-cancel">Cancel</button>
+  </div>
+</div>
+
+<!-- ═══════════ GAME SCREEN ═══════════ -->
+<div id="game-screen" hidden>
+  <div id="scoreboard">
+    <span id="p1-label" class="pname p1">Player 1</span>
+    <span id="score-display">0 : 0</span>
+    <span id="p2-label" class="pname p2">Player 2</span>
+    <button id="pause-btn" title="Pause the game after the next point is scored">⏸ Pause Next</button>
+    <button id="end-game-btn" title="End the game and return to lobby">✕ End</button>
+  </div>
+
+  <div class="game-wrap">
+    <canvas id="game-canvas" width="800" height="500"></canvas>
+    <div id="game-msg">
+      <div id="game-msg-text"></div>
+      <button id="resume-btn" hidden>▶ Resume</button>
+    </div>
+  </div>
+
+  <div id="chat-panel">
+    <div id="chat-header">Game Chat</div>
+    <div id="chat-messages">
+      <div class="chat-empty" id="chat-empty">No messages yet — say hello!</div>
+    </div>
+    <div id="chat-input-row">
+      <input id="chat-input" type="text" placeholder="Say something…" maxlength="200" autocomplete="off" />
+      <button id="chat-send-btn">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- PubNub JS SDK -->
+<script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.2.2.min.js"></script>
+<script>
+'use strict';
+
+// ─── Config ──────────────────────────────────────────────────────────────────
+const PUB_KEY  = 'pub-key-here';
+const SUB_KEY  = 'sub-key-here';
+const LOBBY_CH = 'pong-lobby';
+
+// ─── Canvas / Physics constants ───────────────────────────────────────────────
+const CW = 800, CH = 500;
+const PW = 12, PH = 80, PH2 = 40;
+const P1X = 20, P2X = CW - P1X - PW;
+const BR = 8;
+const BASE_SPD     = 3;   // pixels per physics tick
+const PAD_THROTTLE = 33;  // paddle publish interval ms (~30fps)
+
+// ─── Runtime state ────────────────────────────────────────────────────────────
+let pubnub       = null;
+let myUUID       = 'pong-' + Math.random().toString(36).slice(2, 9);
+let username     = '';
+let playerNum    = 0;
+let gameId       = null;
+let gameCh       = null;
+let opponentName = '';
+let score        = { p1: 0, p2: 0 };
+let gameRunning  = false;
+let gamePaused   = false;
+let lobbySubbed  = false;
+
+let pauseAfterNext = false;
+let lastScorer     = 1;
+
+// Ball and paddles
+let ball         = { x: CW / 2, y: CH / 2, vx: BASE_SPD, vy: BASE_SPD * 0.7 };
+let paddles      = { p1: CH / 2, p2: CH / 2 };
+let paddleTarget = { p1: CH / 2, p2: CH / 2 };
+let mouseY       = CH / 2;
+
+// Timers
+let physicsTimer  = null;
+let resetTimer    = null;
+let announceTimer = null;
+let msgHideTimer  = null;
+let lastPadPub    = 0;
+
+// Lobby
+let listings     = {};
+let cleanupTimer = null;
+
+// Chat
+const sentChatIds = new Set();
+
+// ─── Utility ──────────────────────────────────────────────────────────────────
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const genId  = () => Math.random().toString(36).slice(2, 8).toUpperCase();
+
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+// ─── PubNub ───────────────────────────────────────────────────────────────────
+function initPubNub() {
+  let myUUID = 'pong_' + username;
+  //console.log(myUUID);
+  pubnub = new PubNub({ publishKey: PUB_KEY, subscribeKey: SUB_KEY, userId: myUUID });
+  pubnub.addListener({
+    message({ channel, message: msg }) {
+      if (channel === LOBBY_CH)              handleLobbyMsg(msg);
+      else if (gameCh && channel === gameCh) handleGameMsg(msg);
+    }
+  });
+}
+
+function pub(channel, message) {
+  if (!pubnub) return;
+  pubnub.publish({ channel, message }).catch(e => console.warn('pub err', e));
+}
+
+// ─── Lobby ────────────────────────────────────────────────────────────────────
+function joinLobby() {
+  if (lobbySubbed) return;
+  pubnub.subscribe({ channels: [LOBBY_CH] });
+  lobbySubbed = true;
+  cleanupTimer = setInterval(() => {
+    const now = Date.now();
+    Object.entries(listings).forEach(([id, g]) => {
+      if (now - g.ts > 8000) { delete listings[id]; removeListingEl(id); }
+    });
+  }, 2000);
+}
+
+function leaveLobby() {
+  if (!lobbySubbed) return;
+  pubnub.unsubscribe({ channels: [LOBBY_CH] });
+  lobbySubbed = false;
+  clearInterval(cleanupTimer);
+}
+
+function handleLobbyMsg(msg) {
+  if (msg.type === 'GAME_ANNOUNCE') {
+    if (msg.creator === username) return;
+    listings[msg.gameId] = { creator: msg.creator, ts: Date.now() };
+    upsertListingEl(msg.gameId, msg.creator);
+  } else if (msg.type === 'GAME_REMOVE') {
+    delete listings[msg.gameId];
+    removeListingEl(msg.gameId);
+  }
+}
+
+function upsertListingEl(id, creator) {
+  let li = document.getElementById('li-' + id);
+  if (!li) {
+    li = document.createElement('li');
+    li.id = 'li-' + id;
+    li.className = 'game-item';
+    document.getElementById('games-list').appendChild(li);
+  }
+  li.innerHTML =
+    `<span class="creator">🎮 ${escHtml(creator)}'s game</span>` +
+    `<button onclick="doJoin('${id}','${escHtml(creator)}')">Join</button>`;
+  document.getElementById('no-games').hidden = true;
+}
+
+function removeListingEl(id) {
+  const el = document.getElementById('li-' + id);
+  if (el) el.remove();
+  document.getElementById('no-games').hidden =
+    document.getElementById('games-list').children.length > 0;
+}
+
+// ─── Create / Join / Cancel ───────────────────────────────────────────────────
+function doCreate() {
+  gameId    = genId();
+  gameCh    = 'pong-game-' + gameId;
+  playerNum = 1;
+  pubnub.subscribe({ channels: [gameCh] });
+  showWaiting('Waiting for an opponent to join…');
+  const announce = () => pub(LOBBY_CH, { type: 'GAME_ANNOUNCE', gameId, creator: username });
+  announce();
+  announceTimer = setInterval(announce, 3000);
+}
+
+function doJoin(id, creator) {
+  gameId       = id;
+  gameCh       = 'pong-game-' + id;
+  playerNum    = 2;
+  opponentName = creator;
+  leaveLobby();
+  pubnub.subscribe({ channels: [gameCh] });
+  showWaiting(`Joining ${escHtml(creator)}'s game…`);
+  pub(gameCh, { type: 'PLAYER_JOIN', username });
+}
+
+function doCancel() {
+  if (announceTimer) { clearInterval(announceTimer); announceTimer = null; }
+  if (playerNum === 1 && gameId) pub(LOBBY_CH, { type: 'GAME_REMOVE', gameId });
+  if (gameCh) pubnub.unsubscribe({ channels: [gameCh] });
+  gameId = null; gameCh = null; playerNum = 0;
+  document.getElementById('waiting-section').hidden = true;
+  document.getElementById('game-options').hidden    = false;
+  if (!lobbySubbed) joinLobby();
+}
+
+// ─── Game message handling ────────────────────────────────────────────────────
+function handleGameMsg(msg) {
+  switch (msg.type) {
+
+    case 'PLAYER_JOIN':
+      if (playerNum !== 1) break;
+      opponentName = msg.username;
+      if (announceTimer) { clearInterval(announceTimer); announceTimer = null; }
+      pub(LOBBY_CH, { type: 'GAME_REMOVE', gameId });
+      // Reset ball first so we can embed initial state in GAME_START
+      resetBall(1);
+      pub(gameCh, { type: 'GAME_START', p1: username, p2: opponentName,
+                    bx: ball.x, by: ball.y, bvx: ball.vx, bvy: ball.vy });
+      startGame(username, opponentName);
+      break;
+
+    case 'GAME_START':
+      if (playerNum !== 2) break;
+      // Snap to P1's initial ball state so both start identically
+      ball.x = msg.bx; ball.y = msg.by;
+      ball.vx = msg.bvx; ball.vy = msg.bvy;
+      opponentName = msg.p1;
+      startGame(msg.p1, msg.p2);
+      break;
+
+    case 'PADDLE':
+      if (msg.player !== playerNum)
+        paddleTarget[msg.player === 1 ? 'p1' : 'p2'] = msg.y;
+      break;
+
+    // ── Event-driven ball sync ───────────────────────────────────────────────
+
+    case 'BALL_HIT':
+      // P1 is the sole authority — P2 snaps to the confirmed ball state
+      if (playerNum === 2) {
+        ball.x = msg.x; ball.y = msg.y;
+        ball.vx = msg.vx; ball.vy = msg.vy;
+      }
+      break;
+
+    case 'SERVE':
+      // P1 is serving (after a point or resume) — P2 syncs and restarts
+      if (playerNum !== 1) {
+        ball.x = msg.x; ball.y = msg.y;
+        ball.vx = msg.vx; ball.vy = msg.vy;
+        gamePaused  = false;
+        gameRunning = true;
+        clearTimeout(resetTimer);
+        document.getElementById('resume-btn').hidden = true;
+        document.getElementById('game-msg').classList.remove('show');
+        updatePauseBtn();
+      }
+      break;
+
+    // ── Scoring ──────────────────────────────────────────────────────────────
+
+    case 'SCORE':
+      score.p1 = msg.p1; score.p2 = msg.p2;
+      refreshScore();
+      break;
+
+    case 'POINT':
+      showMsg(`${escHtml(msg.name)} scores!`, 1800);
+      if (playerNum === 2) {
+        gameRunning = false;
+        clearTimeout(resetTimer);
+        if (msg.paused) {
+          gamePaused     = true;
+          pauseAfterNext = false;
+          updatePauseBtn();
+          resetTimer = setTimeout(() => {
+            showMsg('PAUSED', 0);
+            document.getElementById('resume-btn').hidden = false;
+          }, 1900);
+        }
+        // Not paused: P2 waits for SERVE from P1 before restarting
+      }
+      break;
+
+    // ── Pause ────────────────────────────────────────────────────────────────
+
+    case 'PAUSE_TOGGLE':
+      pauseAfterNext = msg.enabled;
+      updatePauseBtn();
+      break;
+
+    // ── Resume (P2 → P1) ─────────────────────────────────────────────────────
+
+    case 'RESUME':
+      if (playerNum === 1 && gamePaused) doResume();
+      break;
+
+    // ── End game ─────────────────────────────────────────────────────────────
+
+    case 'GAME_END':
+      returnToLobby();
+      break;
+
+    // ── Chat ─────────────────────────────────────────────────────────────────
+
+    case 'CHAT':
+      if (!sentChatIds.has(msg.id))
+        appendChatMsg(msg.sender, msg.text, msg.ts, false);
+      break;
+  }
+}
+
+// ─── Game start ───────────────────────────────────────────────────────────────
+function startGame(p1name, p2name) {
+  document.getElementById('p1-label').textContent = p1name;
+  document.getElementById('p2-label').textContent = p2name;
+  document.getElementById('lobby-screen').hidden  = true;
+  document.getElementById('game-screen').hidden   = false;
+
+  score          = { p1: 0, p2: 0 };
+  paddles        = { p1: CH / 2, p2: CH / 2 };
+  paddleTarget   = { p1: CH / 2, p2: CH / 2 };
+  pauseAfterNext = false;
+  gamePaused     = false;
+  gameRunning    = true;
+  updatePauseBtn();
+  refreshScore();
+  showMsg('GET READY!', 2000);
+  startGameLoop();
+}
+
+// ─── Game loops ───────────────────────────────────────────────────────────────
+const canvas = document.getElementById('game-canvas');
+const ctx    = canvas.getContext('2d');
+
+window.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  mouseY = clamp(e.clientY - rect.top, PH2, CH - PH2);
+});
+
+function startGameLoop() {
+  stopGameLoop();
+  physicsTimer = setInterval(physicsAndPublish, 16);
+}
+
+function stopGameLoop() {
+  clearInterval(physicsTimer);
+  physicsTimer = null;
+}
+
+// Physics + publish tick — runs via setInterval (more reliable than rAF in bg tabs)
+function physicsAndPublish() {
+  const now = performance.now();
+
+  // Own paddle always tracks mouse
+  if (playerNum === 1) paddles.p1 = mouseY;
+  else if (playerNum === 2) paddles.p2 = mouseY;
+
+  // Step physics when actively playing
+  if (gameRunning && !gamePaused) stepPhysics();
+
+  // Lerp opponent paddle toward last received position
+  if (playerNum === 1) paddles.p2 = paddles.p2 * 0.7 + paddleTarget.p2 * 0.3;
+  else if (playerNum === 2) paddles.p1 = paddles.p1 * 0.7 + paddleTarget.p1 * 0.3;
+
+  // Throttled paddle publish
+  if (gameCh && now - lastPadPub >= PAD_THROTTLE) {
+    pub(gameCh, { type: 'PADDLE', player: playerNum, y: mouseY });
+    lastPadPub = now;
+  }
+}
+
+// Render loop — pure rAF, always running
+(function renderLoop() {
+  render();
+  requestAnimationFrame(renderLoop);
+})();
+
+// ─── Physics ──────────────────────────────────────────────────────────────────
+function stepPhysics() {
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+
+  // Wall bounces — identical on both sides
+  if (ball.y - BR <= 0)  { ball.y = BR;      ball.vy =  Math.abs(ball.vy); }
+  if (ball.y + BR >= CH) { ball.y = CH - BR; ball.vy = -Math.abs(ball.vy); }
+
+  if (playerNum === 1) {
+    // ── P1 is authoritative for ALL ball physics ──────────────────────────
+
+    // P1 own paddle
+    if (ball.vx < 0 &&
+        ball.x - BR <= P1X + PW && ball.x + BR >= P1X &&
+        ball.y + BR >= paddles.p1 - PH2 && ball.y - BR <= paddles.p1 + PH2) {
+      ball.x  = P1X + PW + BR;
+      ball.vx = Math.abs(ball.vx);
+      addSpin(paddles.p1);
+      bumpSpeed();
+      pub(gameCh, { type: 'BALL_HIT', x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy });
+    }
+
+    // P2 paddle — use paddleTarget (most current received position, not lerped)
+    if (ball.vx > 0 &&
+        ball.x + BR >= P2X && ball.x - BR <= P2X + PW &&
+        ball.y + BR >= paddleTarget.p2 - PH2 && ball.y - BR <= paddleTarget.p2 + PH2) {
+      ball.x  = P2X - BR;
+      ball.vx = -Math.abs(ball.vx);
+      addSpin(paddleTarget.p2);
+      bumpSpeed();
+      pub(gameCh, { type: 'BALL_HIT', x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy });
+    }
+
+    // Scoring
+    if (ball.x - BR <= 0)       awardPoint(2);
+    else if (ball.x + BR >= CW) awardPoint(1);
+
+  } else {
+    // ── P2: local prediction only (no scoring, no publishing) ────────────
+    // Immediately reverse on own paddle contact so it feels responsive.
+    // P1's authoritative BALL_HIT will snap the position shortly after.
+    if (ball.vx > 0 &&
+        ball.x + BR >= P2X && ball.x - BR <= P2X + PW &&
+        ball.y + BR >= paddles.p2 - PH2 && ball.y - BR <= paddles.p2 + PH2) {
+      ball.x  = P2X - BR;
+      ball.vx = -Math.abs(ball.vx);
+      addSpin(paddles.p2);
+    }
+
+    // Clamp at walls — wait for POINT + SERVE from P1
+    ball.x = clamp(ball.x, BR, CW - BR);
+  }
+}
+
+function addSpin(paddleY) {
+  ball.vy = ((ball.y - paddleY) / PH2) * BASE_SPD * 1.4;
+}
+
+function bumpSpeed() {
+  const spd = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+  if (spd < BASE_SPD * 2.2) {
+    const f = Math.min(spd * 1.06, BASE_SPD * 2.2) / spd;
+    ball.vx *= f; ball.vy *= f;
+  }
+}
+
+function resetBall(dirX) {
+  ball.x  = CW / 2;
+  ball.y  = CH / 2;
+  const a = (Math.random() * 40 - 20) * (Math.PI / 180);
+  ball.vx = dirX * BASE_SPD * Math.cos(a);
+  ball.vy = BASE_SPD * Math.sin(a);
+}
+
+// Reset ball and broadcast state to P2
+function serveBall(dirX) {
+  resetBall(dirX);
+  pub(gameCh, { type: 'SERVE', x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy });
+}
+
+// ─── Scoring ──────────────────────────────────────────────────────────────────
+function awardPoint(scorer) {
+  scorer === 1 ? score.p1++ : score.p2++;
+  lastScorer = scorer;
+  refreshScore();
+
+  const scorerName = scorer === 1
+    ? document.getElementById('p1-label').textContent
+    : document.getElementById('p2-label').textContent;
+  const willPause = pauseAfterNext;
+
+  pub(gameCh, { type: 'SCORE', p1: score.p1, p2: score.p2 });
+  pub(gameCh, { type: 'POINT', scorer, name: scorerName, paused: willPause });
+
+  gameRunning = false;
+  clearTimeout(resetTimer);
+
+  if (willPause) {
+    pauseAfterNext = false;
+    gamePaused     = true;
+    updatePauseBtn();
+    showMsg(`${scorerName} scores!`, 1800);
+    pub(gameCh, { type: 'PAUSE_TOGGLE', enabled: false });
+    resetTimer = setTimeout(() => {
+      showMsg('PAUSED', 0);
+      document.getElementById('resume-btn').hidden = false;
+    }, 1900);
+  } else {
+    showMsg(`${scorerName} scores!`, 1800);
+    resetTimer = setTimeout(() => {
+      serveBall(scorer === 1 ? 1 : -1);
+      gameRunning = true;
+    }, 2000);
+  }
+}
+
+// ─── Pause / Resume ───────────────────────────────────────────────────────────
+function togglePause() {
+  pauseAfterNext = !pauseAfterNext;
+  pub(gameCh, { type: 'PAUSE_TOGGLE', enabled: pauseAfterNext });
+  updatePauseBtn();
+}
+
+function updatePauseBtn() {
+  const btn = document.getElementById('pause-btn');
+  if (gamePaused) {
+    btn.textContent = '⏸ Paused';
+    btn.className   = '';
+    btn.disabled    = true;
+  } else if (pauseAfterNext) {
+    btn.textContent = '⏸ Cancel Pause';
+    btn.className   = 'armed';
+    btn.disabled    = false;
+  } else {
+    btn.textContent = '⏸ Pause Next';
+    btn.className   = '';
+    btn.disabled    = false;
+  }
+}
+
+function doResume() {
+  gamePaused = false;
+  document.getElementById('resume-btn').hidden = true;
+  document.getElementById('game-msg').classList.remove('show');
+  gameRunning = true;
+  serveBall(lastScorer === 1 ? 1 : -1);
+  updatePauseBtn();
+}
+
+// ─── End game / Return to lobby ───────────────────────────────────────────────
+function returnToLobby() {
+  if (!gameCh) return;
+
+  stopGameLoop();
+  gameRunning = false;
+  gamePaused  = false;
+  clearTimeout(resetTimer);
+  clearTimeout(msgHideTimer);
+  if (announceTimer) { clearInterval(announceTimer); announceTimer = null; }
+
+  pubnub.unsubscribe({ channels: [gameCh] });
+  gameCh         = null;
+  gameId         = null;
+  playerNum      = 0;
+  score          = { p1: 0, p2: 0 };
+  pauseAfterNext = false;
+  ball           = { x: CW / 2, y: CH / 2, vx: BASE_SPD, vy: BASE_SPD * 0.7 };
+  paddles        = { p1: CH / 2, p2: CH / 2 };
+  paddleTarget   = { p1: CH / 2, p2: CH / 2 };
+
+  document.getElementById('resume-btn').hidden = true;
+  document.getElementById('game-msg').classList.remove('show');
+  document.getElementById('chat-messages').innerHTML =
+    '<div class="chat-empty" id="chat-empty">No messages yet — say hello!</div>';
+  sentChatIds.clear();
+  updatePauseBtn();
+
+  document.getElementById('game-screen').hidden     = true;
+  document.getElementById('lobby-screen').hidden    = false;
+  document.getElementById('waiting-section').hidden = true;
+  document.getElementById('game-options').hidden    = false;
+
+  document.getElementById('games-list').innerHTML = '';
+  document.getElementById('no-games').hidden = false;
+  listings = {};
+
+  if (!lobbySubbed) joinLobby();
+}
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text  = input.value.trim().slice(0, 200);
+  if (!text) return;
+  input.value = '';
+
+  const id = myUUID + '-' + Date.now();
+  const ts = Date.now();
+  sentChatIds.add(id);
+  pub(gameCh, { type: 'CHAT', sender: username, text, ts, id });
+  appendChatMsg(username, text, ts, true);
+}
+
+function appendChatMsg(sender, text, ts, isMine) {
+  const log   = document.getElementById('chat-messages');
+  const empty = document.getElementById('chat-empty');
+  if (empty) empty.remove();
+
+  const time = new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const div  = document.createElement('div');
+  div.className = 'chat-msg' + (isMine ? ' mine' : '');
+  div.innerHTML =
+    `<div class="chat-meta"><span class="chat-who">${escHtml(sender)}</span>` +
+    `<span class="chat-time">${time}</span></div>` +
+    `<div class="chat-text">${escHtml(text)}</div>`;
+
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  while (log.children.length > 50) log.removeChild(log.firstChild);
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+function render() {
+  ctx.clearRect(0, 0, CW, CH);
+  ctx.fillStyle = '#0d0d1a';
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Centre dashed line
+  ctx.setLineDash([8, 10]);
+  ctx.strokeStyle = '#1e1e3a';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(CW / 2, 0); ctx.lineTo(CW / 2, CH);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  drawPaddle(P1X, paddles.p1, '#00ff87');
+  drawPaddle(P2X, paddles.p2, '#ff6b6b');
+
+  // Ball
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, BR, 0, Math.PI * 2);
+  ctx.fillStyle   = '#ffd93d';
+  ctx.shadowColor = '#ffd93d';
+  ctx.shadowBlur  = 18;
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Crosshair on own paddle edge
+  if (playerNum === 1) drawCrosshair(P1X + PW + 14, mouseY, '#00ff8755');
+  else                  drawCrosshair(P2X - 14,      mouseY, '#ff6b6b55');
+}
+
+function drawPaddle(x, cy, color) {
+  const y = cy - PH2, r = 4;
+  ctx.fillStyle   = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur  = 14;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + PW - r, y);
+  ctx.arcTo(x + PW, y,      x + PW, y + r,      r);
+  ctx.lineTo(x + PW, y + PH - r);
+  ctx.arcTo(x + PW, y + PH, x + PW - r, y + PH, r);
+  ctx.lineTo(x + r, y + PH);
+  ctx.arcTo(x,      y + PH, x, y + PH - r,       r);
+  ctx.lineTo(x,     y + r);
+  ctx.arcTo(x,      y,      x + r, y,             r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+}
+
+function drawCrosshair(x, y, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x - 7, y); ctx.lineTo(x + 7, y);
+  ctx.moveTo(x, y - 7); ctx.lineTo(x, y + 7);
+  ctx.stroke();
+}
+
+// ─── UI helpers ───────────────────────────────────────────────────────────────
+function showWaiting(text) {
+  document.getElementById('game-options').hidden    = true;
+  document.getElementById('waiting-section').hidden = false;
+  document.getElementById('waiting-text').textContent = text;
+}
+
+function showMsg(text, duration) {
+  const el  = document.getElementById('game-msg');
+  const txt = document.getElementById('game-msg-text');
+  txt.innerHTML = escHtml(text).replace('\n', '<br>');
+  el.classList.add('show');
+  clearTimeout(msgHideTimer);
+  if (duration > 0)
+    msgHideTimer = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function refreshScore() {
+  document.getElementById('score-display').textContent = `${score.p1} : ${score.p2}`;
+}
+
+// ─── Event wiring ─────────────────────────────────────────────────────────────
+document.getElementById('enter-btn').addEventListener('click', onEnter);
+document.getElementById('username-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') onEnter();
+});
+document.getElementById('create-btn').addEventListener('click', doCreate);
+document.getElementById('cancel-btn').addEventListener('click', doCancel);
+document.getElementById('pause-btn').addEventListener('click', togglePause);
+
+document.getElementById('end-game-btn').addEventListener('click', () => {
+  pub(gameCh, { type: 'GAME_END' });
+  returnToLobby();
+});
+
+document.getElementById('resume-btn').addEventListener('click', () => {
+  if (playerNum === 1) doResume();
+  else pub(gameCh, { type: 'RESUME' });
+});
+
+document.getElementById('chat-send-btn').addEventListener('click', sendChat);
+document.getElementById('chat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendChat();
+});
+document.getElementById('chat-input').addEventListener('mousemove', e => e.stopPropagation());
+
+function onEnter() {
+  const val   = document.getElementById('username-input').value.trim();
+  const errEl = document.getElementById('username-error');
+  if (!val)                           { errEl.textContent = 'Please enter a username.'; return; }
+  if (!/^[a-zA-Z0-9]+$/.test(val))   { errEl.textContent = 'Only letters and numbers allowed.'; return; }
+
+  errEl.textContent = '';
+  username = val;
+  document.getElementById('username-input').disabled = true;
+  document.getElementById('enter-btn').disabled      = true;
+  document.getElementById('username-card').style.opacity = '.6';
+
+  initPubNub();
+  joinLobby();
+  document.getElementById('game-options').hidden = false;
+}
+
+window.doJoin = doJoin;
+</script>
+</body>
+</html>
