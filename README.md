@@ -19,5 +19,7 @@ subscribeKey: "sub-key-here"
 ```
 with your pub/sub keys
 
-Ball speed can be changed by altering the value:
-`const BASE_SPD     = 3;`
+Ball speed can be changed by altering
+```
+const BASE_SPD     = 3;
+```
